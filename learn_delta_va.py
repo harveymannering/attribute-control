@@ -60,8 +60,6 @@ def main(cfg: DictConfig):
         model.pipe.set_progress_bar_config(disable=True)
     #dataset = PromptCombinationDataset(cfg.prompts, cfg.prefixes)
     dataset = PromptCombinationDataset_VA(cfg.prompts, cfg.prefixes)
-    print("cfg.prompts, cfg.prefixes ----------->>>>>>>>>>>>>>>>.", cfg.prompts, cfg.prefixes)
-    print(dataset[0])
     batch_size: int = cfg.batch_size
     scale_batch_size: int = cfg.scale_batch_size
     scale_min, scale_max = cfg.scale_range
@@ -71,7 +69,6 @@ def main(cfg: DictConfig):
     ckpt_logging_freq: int = cfg.ckpt_logging_freq
 
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True, drop_last=True)
-    print('model.dims', model.dims)
     delta = EmbeddingDelta(model.dims) # model.dims = {'oai_clip_vit_l': 768, 'openclip_g': 1280}
     if not cfg.init_from_ckpt is None:
         logger.info(f'Loading checkpoint from {cfg.init_from_ckpt}.')

@@ -399,6 +399,7 @@ class SDXL(SD15):
             "time_ids": add_time_ids,
             "text_embeds": p_embs['pooled_prompt_embeds'],
         }
+        print(p_embs['prompt_embeds'], start_sample.shape)
         return self._get_eps_pred(t, start_sample, self.pipe.unet(start_sample, t, encoder_hidden_states=p_embs['prompt_embeds'], added_cond_kwargs=unet_added_conditions).sample)
 
 
@@ -442,7 +443,6 @@ class StableCascade(DiffusersModelBase):
         pooled_text_features = np.zeros((len(emotion_prompts), 1280))
         with torch.no_grad():
             for e in range(len(emotion_prompts)):
-                print(e)
                 text_feature, _, pooled_text_feature, _ = self.pipe.encode_prompt(emotion_prompts[e])
                 text_features[e] = text_feature.detach().cpu().float().numpy()
                 pooled_text_features[e] = pooled_text_feature.detach().cpu().float().numpy()
