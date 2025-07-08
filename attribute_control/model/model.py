@@ -412,7 +412,7 @@ class SDXL(SD15):
             'negative_prompt_embeds': None,
             'negative_pooled_prompt_embeds': None,
         } | ({ 'latents': start_sample } if not start_sample is None else { }) | kwargs
-        print("pipe_kwargs >>>>>>>>>>>", pipe_kwargs['prompt_embeds'].shape)
+        #print("pipe_kwargs >>>>>>>>>>>", pipe_kwargs['prompt_embeds'].shape)
         return pipe_kwargs
 
     def _compute_time_ids(self, device, weight_dtype) -> torch.Tensor:
@@ -437,8 +437,8 @@ class SDXL(SD15):
             "time_ids": add_time_ids,
             "text_embeds": p_embs['pooled_prompt_embeds'],
         }
-        print(p_embs['prompt_embeds'].shape, start_sample.shape)
-        return self._get_eps_pred(t, start_sample, self.pipe.unet(start_sample, t, encoder_hidden_states=p_embs['prompt_embeds'][0], added_cond_kwargs=unet_added_conditions).sample)
+        print(p_embs['prompt_embeds'].shape, start_sample.shape, t)
+        return self._get_eps_pred(t, start_sample, self.pipe.unet(start_sample, t, encoder_hidden_states=p_embs['prompt_embeds'], added_cond_kwargs=unet_added_conditions).sample)
 
 
 class StableCascade(DiffusersModelBase):
