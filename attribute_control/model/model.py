@@ -394,7 +394,7 @@ class SDXL(SD15):
             tokenwise_embedding_spans=token_spans,
         )
         prompt_emb_obj.pooled_embeddings = { NAME_OPENAI_CLIP_VIT_L: torch.tensor(X_mean_pooled)[:768].to(self.pipe.device).half(), NAME_OPENCLIP_G: torch.tensor(X_mean_pooled)[768:].to(self.pipe.device).half() }
-        return prompt_emb_obj, tokenwise_direction
+        return prompt_emb_obj, torch.tensor(tokenwise_direction).to(self.pipe.device).half()
 
     def _get_pipe_kwargs(self, embs: List[PromptEmbedding], embs_neg: Optional[List[PromptEmbedding]] = None, start_sample: Optional[torch.Tensor] = None, **kwargs):
         
