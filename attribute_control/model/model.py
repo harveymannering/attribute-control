@@ -276,7 +276,6 @@ class SD15(DiffusersSDModelBase):
         pooled_text_features = np.zeros((len(emotion_prompts), 1280))
         with torch.no_grad():
             for e in range(len(emotion_prompts)):
-                print(e)
                 text_feature, _, pooled_text_feature, _ = self.pipe.encode_prompt(emotion_prompts[e])
                 text_features[e] = text_feature.detach().cpu().float().numpy()
                 pooled_text_features[e] = pooled_text_feature.detach().cpu().float().numpy()
@@ -297,10 +296,10 @@ class SD15(DiffusersSDModelBase):
         token_spans = self.get_token_spans(f"{prompt_prefix} {prompt_suffix}")
         prompt_emb_obj = PromptEmbedding(
             prompt=f"{prompt_prefix} {prompt_suffix}",
-            tokenwise_embeddings={ NAME_OPENAI_CLIP_VIT_L: tokenwise_embeddings },
+            tokenwise_embeddings={ NAME_OPENAI_CLIP_VIT_L: tokenwise_embeddings.to(self.pipe.device).half()},
             tokenwise_embedding_spans=token_spans,
         )
-        prompt_emb_obj.pooled_embeddings = torch.tensor(X_mean_pooled)
+        prompt_emb_obj.pooled_embeddings = torch.tensor(X_mean_pooled).to(self.pipe.device).half()
         return prompt_emb_obj, tokenwise_direction
 
     def _get_pipe_kwargs(self, embs: List[PromptEmbedding], embs_neg: Optional[List[PromptEmbedding]] = None, start_sample: Optional[torch.Tensor] = None, **kwargs):
@@ -371,7 +370,6 @@ class SDXL(SD15):
         pooled_text_features = np.zeros((len(emotion_prompts), 1280))
         with torch.no_grad():
             for e in range(len(emotion_prompts)):
-                print(e)
                 text_feature, _, pooled_text_feature, _ = self.pipe.encode_prompt(emotion_prompts[e])
                 text_features[e] = text_feature.detach().cpu().float().numpy()
                 pooled_text_features[e] = pooled_text_feature.detach().cpu().float().numpy()
@@ -392,10 +390,10 @@ class SDXL(SD15):
         
         prompt_emb_obj = PromptEmbedding(
             prompt=f"{prompt_prefix} {prompt_suffix}",
-            tokenwise_embeddings={ NAME_OPENAI_CLIP_VIT_L: tokenwise_embeddings[...,:768], NAME_OPENCLIP_G: tokenwise_embeddings[...,768:] },
+            tokenwise_embeddings={ NAME_OPENAI_CLIP_VIT_L: tokenwise_embeddings[...,:768].to(self.pipe.device).half(), NAME_OPENCLIP_G: tokenwise_embeddings[...,768:].to(self.pipe.device).half() },
             tokenwise_embedding_spans=token_spans,
         )
-        prompt_emb_obj.pooled_embeddings = { NAME_OPENAI_CLIP_VIT_L: torch.tensor(X_mean_pooled)[:768], NAME_OPENCLIP_G: torch.tensor(X_mean_pooled)[768:] }
+        prompt_emb_obj.pooled_embeddings = { NAME_OPENAI_CLIP_VIT_L: torch.tensor(X_mean_pooled)[:768].to(self.pipe.device).half(), NAME_OPENCLIP_G: torch.tensor(X_mean_pooled)[768:].to(self.pipe.device).half() }
         return prompt_emb_obj, tokenwise_direction
 
     def _get_pipe_kwargs(self, embs: List[PromptEmbedding], embs_neg: Optional[List[PromptEmbedding]] = None, start_sample: Optional[torch.Tensor] = None, **kwargs):
@@ -435,9 +433,8 @@ class SDXL(SD15):
         add_time_ids = add_time_ids.to(start_sample.device).repeat(len(embs), 1)
         unet_added_conditions = {
             "time_ids": add_time_ids,
-            "text_embeds": p_embs['pooled_prompt_embeds'][None].to(self.pipe.device),
+            "text_embeds": p_embs['pooled_prompt_embeds'][None],
         }
-        print(p_embs['prompt_embeds'].shape, start_sample.shape, t, p_embs['pooled_prompt_embeds'].shape, add_time_ids)
         print(p_embs['prompt_embeds'].dtype, p_embs['prompt_embeds'].device, p_embs['pooled_prompt_embeds'].dtype, p_embs['pooled_prompt_embeds'].device)
         return self._get_eps_pred(t, start_sample, self.pipe.unet(start_sample, t, encoder_hidden_states=p_embs['prompt_embeds'], added_cond_kwargs=unet_added_conditions).sample)
 
