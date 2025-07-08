@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod, abstractproperty
 from typing import Union, Tuple, Dict, Optional, List, Any
 from pydoc import locate
 import warnings
+warnings.filterwarnings("ignore")
 
 import torch
 from torch import nn
@@ -13,6 +14,8 @@ import diffusers
 from diffusers import DDIMScheduler
 from diffusers.pipelines.pipeline_utils import DiffusionPipeline
 from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion import retrieve_timesteps
+from sklearn.decomposition import PCA
+import numpy as np
 
 from ..utils import reduce_tensors_recursively, broadcast_trailing_dims
 from .. import PromptEmbedding, EmbeddingDelta
@@ -21,6 +24,20 @@ from .. import PromptEmbedding, EmbeddingDelta
 NAME_OPENAI_CLIP_VIT_L = 'oai_clip_vit_l'
 NAME_OPENCLIP_G = 'openclip_g'
 
+def align_principle_components(start_points):
+
+    # Define the target locations for happy, sad, sleepy, and surprised
+    target_points = np.array([[1, 0], [-1, 0], [0, -1], [0, 1]]).T
+
+    # Perform linear regression
+    translation_matrix = target_points @ np.linalg.pinv(start_points.T @ start_points) @ start_points.T
+
+    # Calculate total distance between target and translated points
+    diff = target_points - (translation_matrix @ start_points)
+    error = np.sum(np.linalg.norm(diff, axis=0))
+
+    # Return the translation matrices both forward and inverse
+    return translation_matrix, np.linalg.pinv(translation_matrix), error
 
 class ModelBase(ABC, nn.Module):
     def __init__(self, device: Union[str, torch.device] = 'cuda:0', compile: bool = False) -> None:
@@ -32,6 +49,10 @@ class ModelBase(ABC, nn.Module):
 
     @abstractmethod
     def embed_prompt(self, prompt: str) -> PromptEmbedding:
+        raise NotImplementedError()
+    
+    @abstractmethod
+    def embed_prompt_va(self, prompt_prefix: str, prompt_suffix: str):
         raise NotImplementedError()
     
     @abstractmethod
@@ -216,6 +237,52 @@ class SD15(DiffusersSDModelBase):
             tokenwise_embeddings={ NAME_OPENAI_CLIP_VIT_L: prompt_embeds[0] },
             tokenwise_embedding_spans=token_spans,
         )
+    
+    @torch.no_grad
+    def embed_prompt_va(self, prompt_prefix: str, prompt_suffix: str):
+        
+        # Define a list of emotion words
+        emotion_list = [
+            "happy",
+            "sad",
+            "sleepy",
+            "surprised",
+        ]
+        
+        # Build the prompts
+        emotion_prompts = [f"{prompt_prefix} {emotion} {prompt_suffix}" for emotion in emotion_list] # {photo, portrait, painting of a close-up} {face, man, woman}
+        
+        # Encode prompts with CLIP encoder
+        text_features = np.zeros((len(emotion_prompts), 77, 2048))
+        pooled_text_features = np.zeros((len(emotion_prompts), 1280))
+        with torch.no_grad():
+            for e in range(len(emotion_prompts)):
+                print(e)
+                text_feature, _, pooled_text_feature, _ = self.pipe.encode_prompt(emotion_prompts[e])
+                text_features[e] = text_feature.detach().cpu().float().numpy()
+                pooled_text_features[e] = pooled_text_feature.detach().cpu().float().numpy()
+
+        # Perform PCA on prompt embeddings
+        pca = PCA(n_components=2)
+        X_pca = pca.fit_transform(text_features.reshape(len(emotion_list), 77 * 2048))
+        X_comp = pca.components_.reshape(2,77,2048)
+        X_mean_pooled = np.mean(pooled_text_features, axis=0)
+        X_mean = np.mean(text_features, axis=0)
+        
+        # Perform linear regression to find translation matrix that aligns the principle components with
+        # the axis of the valance arousal model of emotion
+        trans_matrix, inv_trans_matrix, error = align_principle_components(X_pca[:4].T)
+        tokenwise_embeddings = X_mean 
+        tokenwise_direction = ((inv_trans_matrix @ np.array([0,1.0]).T) @ X_comp.reshape((-1, 77 * 2048))).reshape(77, 2048)
+        
+        token_spans = self.get_token_spans(f"{prompt_prefix} {prompt_suffix}")
+        prompt_emb_obj = PromptEmbedding(
+            prompt=f"{prompt_prefix} {prompt_suffix}",
+            tokenwise_embeddings={ NAME_OPENAI_CLIP_VIT_L: tokenwise_embeddings },
+            tokenwise_embedding_spans=token_spans,
+        )
+        prompt_emb_obj.pooled_embeddings = torch.tensor(X_mean_pooled)
+        return prompt_emb_obj, tokenwise_direction
 
     def _get_pipe_kwargs(self, embs: List[PromptEmbedding], embs_neg: Optional[List[PromptEmbedding]] = None, start_sample: Optional[torch.Tensor] = None, **kwargs):
         return {
@@ -246,26 +313,69 @@ class SDXL(SD15):
             tokenwise_embedding_spans=token_spans,
             pooled_embeddings={ NAME_OPENAI_CLIP_VIT_L: pooled_prompt_embeds[0][:768], NAME_OPENCLIP_G: pooled_prompt_embeds[0][768:] },
         )
+    
+    @torch.no_grad
+    def embed_prompt_va(self, prompt_prefix: str, prompt_suffix: str):
+        
+        # Define a list of emotion words
+        emotion_list = [
+            "happy",
+            "sad",
+            "sleepy",
+            "surprised",
+        ]
+        
+        # Build the prompts
+        emotion_prompts = [f"{prompt_prefix} {emotion} {prompt_suffix}" for emotion in emotion_list] # {photo, portrait, painting of a close-up} {face, man, woman}
+        
+        # Encode prompts with CLIP encoder
+        text_features = np.zeros((len(emotion_prompts), 77, 2048))
+        pooled_text_features = np.zeros((len(emotion_prompts), 1280))
+        with torch.no_grad():
+            for e in range(len(emotion_prompts)):
+                print(e)
+                text_feature, _, pooled_text_feature, _ = self.pipe.encode_prompt(emotion_prompts[e])
+                text_features[e] = text_feature.detach().cpu().float().numpy()
+                pooled_text_features[e] = pooled_text_feature.detach().cpu().float().numpy()
+
+        # Perform PCA on prompt embeddings
+        pca = PCA(n_components=2)
+        X_pca = pca.fit_transform(text_features.reshape(len(emotion_list), 77 * 2048))
+        X_comp = pca.components_.reshape(2,77,2048)
+        X_mean_pooled = np.mean(pooled_text_features, axis=0)
+        X_mean = np.mean(text_features, axis=0)
+        
+        # Perform linear regression to find translation matrix that aligns the principle components with
+        # the axis of the valance arousal model of emotion
+        trans_matrix, inv_trans_matrix, error = align_principle_components(X_pca[:4].T)
+        tokenwise_embeddings = X_mean 
+        tokenwise_direction = ((inv_trans_matrix @ np.array([0,1.0]).T) @ X_comp.reshape((-1, 77 * 2048))).reshape(77, 2048)
+        token_spans = self.get_token_spans(f"{prompt_prefix} {prompt_suffix}")
+        
+        prompt_emb_obj = PromptEmbedding(
+            prompt=f"{prompt_prefix} {prompt_suffix}",
+            tokenwise_embeddings={ NAME_OPENAI_CLIP_VIT_L: tokenwise_embeddings[...,:768], NAME_OPENCLIP_G: tokenwise_embeddings[...,768:] },
+            tokenwise_embedding_spans=token_spans,
+        )
+        prompt_emb_obj.pooled_embeddings = { NAME_OPENAI_CLIP_VIT_L: torch.tensor(X_mean_pooled)[:768], NAME_OPENCLIP_G: torch.tensor(X_mean_pooled)[768:] }
+        return prompt_emb_obj, tokenwise_direction
 
     def _get_pipe_kwargs(self, embs: List[PromptEmbedding], embs_neg: Optional[List[PromptEmbedding]] = None, start_sample: Optional[torch.Tensor] = None, **kwargs):
-        return {
+        
+        pipe_kwargs = {
             'prompt_embeds': torch.cat([
-                reduce_tensors_recursively(*[emb.tokenwise_embeddings[NAME_OPENAI_CLIP_VIT_L] for emb in embs], reduction_op=torch.stack),
-                reduce_tensors_recursively(*[emb.tokenwise_embeddings[NAME_OPENCLIP_G] for emb in embs], reduction_op=torch.stack)
-            ], dim=-1),
+                torch.tensor(reduce_tensors_recursively(*[emb.tokenwise_embeddings[NAME_OPENAI_CLIP_VIT_L] for emb in embs], reduction_op=torch.stack)[0])[None],
+                torch.tensor(reduce_tensors_recursively(*[emb.tokenwise_embeddings[NAME_OPENCLIP_G] for emb in embs], reduction_op=torch.stack)[0])[None]
+            ], dim=-1),        
             'pooled_prompt_embeds': torch.cat([
-                reduce_tensors_recursively(*[emb.pooled_embeddings[NAME_OPENAI_CLIP_VIT_L] for emb in embs], reduction_op=torch.stack),
-                reduce_tensors_recursively(*[emb.pooled_embeddings[NAME_OPENCLIP_G] for emb in embs], reduction_op=torch.stack)
+                torch.tensor(reduce_tensors_recursively(*[emb.pooled_embeddings[NAME_OPENAI_CLIP_VIT_L] for emb in embs], reduction_op=torch.stack)[0]),
+                torch.tensor(reduce_tensors_recursively(*[emb.pooled_embeddings[NAME_OPENCLIP_G] for emb in embs], reduction_op=torch.stack)[0])
             ], dim=-1),
-            'negative_prompt_embeds': torch.cat([
-                reduce_tensors_recursively(*[emb.tokenwise_embeddings[NAME_OPENAI_CLIP_VIT_L] for emb in embs_neg], reduction_op=torch.stack),
-                reduce_tensors_recursively(*[emb.tokenwise_embeddings[NAME_OPENCLIP_G] for emb in embs_neg], reduction_op=torch.stack)
-            ], dim=-1) if (not embs_neg is None) and not any(e is None for e in embs_neg) else None,
-            'negative_pooled_prompt_embeds': torch.cat([
-                reduce_tensors_recursively(*[emb.pooled_embeddings[NAME_OPENAI_CLIP_VIT_L] for emb in embs_neg], reduction_op=torch.stack),
-                reduce_tensors_recursively(*[emb.pooled_embeddings[NAME_OPENCLIP_G] for emb in embs_neg], reduction_op=torch.stack)
-            ], dim=-1) if (not embs_neg is None) and not any(e is None for e in embs_neg) else None,
+            'negative_prompt_embeds': None,
+            'negative_pooled_prompt_embeds': None,
         } | ({ 'latents': start_sample } if not start_sample is None else { }) | kwargs
+        #print("pipe_kwargs >>>>>>>>>>>", pipe_kwargs['prompt_embeds'].shape)
+        return pipe_kwargs
 
     def _compute_time_ids(self, device, weight_dtype) -> torch.Tensor:
         # Adapted from pipeline.StableDiffusionXLPipeline._get_add_time_ids
@@ -312,6 +422,52 @@ class StableCascade(DiffusersModelBase):
             tokenwise_embedding_spans=token_spans,
             pooled_embeddings={ NAME_OPENCLIP_G: pooled_prompt_embeds[0] },
         )
+    
+    @torch.no_grad
+    def embed_prompt_va(self, prompt_prefix: str, prompt_suffix: str):
+        
+        # Define a list of emotion words
+        emotion_list = [
+            "happy",
+            "sad",
+            "sleepy",
+            "surprised",
+        ]
+        
+        # Build the prompts
+        emotion_prompts = [f"{prompt_prefix} {emotion} {prompt_suffix}" for emotion in emotion_list] # {photo, portrait, painting of a close-up} {face, man, woman}
+        
+        # Encode prompts with CLIP encoder
+        text_features = np.zeros((len(emotion_prompts), 77, 2048))
+        pooled_text_features = np.zeros((len(emotion_prompts), 1280))
+        with torch.no_grad():
+            for e in range(len(emotion_prompts)):
+                print(e)
+                text_feature, _, pooled_text_feature, _ = self.pipe.encode_prompt(emotion_prompts[e])
+                text_features[e] = text_feature.detach().cpu().float().numpy()
+                pooled_text_features[e] = pooled_text_feature.detach().cpu().float().numpy()
+
+        # Perform PCA on prompt embeddings
+        pca = PCA(n_components=2)
+        X_pca = pca.fit_transform(text_features.reshape(len(emotion_list), 77 * 2048))
+        X_comp = pca.components_.reshape(2,77,2048)
+        X_mean_pooled = np.mean(pooled_text_features, axis=0)
+        X_mean = np.mean(text_features, axis=0)
+        
+        # Perform linear regression to find translation matrix that aligns the principle components with
+        # the axis of the valance arousal model of emotion
+        trans_matrix, inv_trans_matrix, error = align_principle_components(X_pca[:4].T)
+        tokenwise_embeddings = X_mean 
+        tokenwise_direction = ((inv_trans_matrix @ np.array([0,1.0]).T) @ X_comp.reshape((-1, 77 * 2048))).reshape(77, 2048)
+        
+        token_spans = self.get_token_spans(f"{prompt_prefix} {prompt_suffix}")
+        prompt_emb_obj = PromptEmbedding(
+            prompt=f"{prompt_prefix} {prompt_suffix}",
+            tokenwise_embeddings={ NAME_OPENAI_CLIP_VIT_L: tokenwise_embeddings },
+            tokenwise_embedding_spans=token_spans,
+        )
+        prompt_emb_obj.pooled_embeddings = torch.tensor(X_mean_pooled)
+        return prompt_emb_obj, tokenwise_direction
 
     def _get_pipe_kwargs(self, embs: List[PromptEmbedding], embs_neg: Optional[List[PromptEmbedding]] = None, start_sample: Optional[torch.Tensor] = None, **kwargs):
         return {
@@ -319,7 +475,7 @@ class StableCascade(DiffusersModelBase):
             'prompt_embeds_pooled': reduce_tensors_recursively(*[emb.pooled_embeddings[NAME_OPENCLIP_G] for emb in embs], reduction_op=torch.stack),
             'negative_prompt_embeds': reduce_tensors_recursively(*[emb.tokenwise_embeddings[NAME_OPENCLIP_G] for emb in embs_neg], reduction_op=torch.stack) if (not embs_neg is None) and not any(e is None for e in embs_neg) else None,
             'negative_prompt_embeds_pooled': reduce_tensors_recursively(*[emb.pooled_embeddings[NAME_OPENCLIP_G] for emb in embs_neg], reduction_op=torch.stack)
-             if (not embs_neg is None) and not any(e is None for e in embs_neg) else None,
+            if (not embs_neg is None) and not any(e is None for e in embs_neg) else None,
         } | ({ 'latents': start_sample } if not start_sample is None else { }) | kwargs
 
     @torch.no_grad
