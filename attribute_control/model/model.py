@@ -296,10 +296,10 @@ class SD15(DiffusersSDModelBase):
         token_spans = self.get_token_spans(f"{prompt_prefix} {prompt_suffix}")
         prompt_emb_obj = PromptEmbedding(
             prompt=f"{prompt_prefix} {prompt_suffix}",
-            tokenwise_embeddings={ NAME_OPENAI_CLIP_VIT_L: torch.tensor(tokenwise_embeddings).to(self.pipe.device).half()},
+            tokenwise_embeddings={ NAME_OPENAI_CLIP_VIT_L: torch.tensor(tokenwise_embeddings).to(self.pipe.device).bfloat16()},
             tokenwise_embedding_spans=token_spans,
         )
-        prompt_emb_obj.pooled_embeddings = torch.tensor(X_mean_pooled).to(self.pipe.device).half()
+        prompt_emb_obj.pooled_embeddings = torch.tensor(X_mean_pooled).to(self.pipe.device).bfloat16()
         return prompt_emb_obj, tokenwise_direction
 
     def _get_pipe_kwargs(self, embs: List[PromptEmbedding], embs_neg: Optional[List[PromptEmbedding]] = None, start_sample: Optional[torch.Tensor] = None, **kwargs):
@@ -390,11 +390,11 @@ class SDXL(SD15):
         
         prompt_emb_obj = PromptEmbedding(
             prompt=f"{prompt_prefix} {prompt_suffix}",
-            tokenwise_embeddings={ NAME_OPENAI_CLIP_VIT_L: torch.tensor(tokenwise_embeddings[...,:768]).to(self.pipe.device).half(), NAME_OPENCLIP_G: torch.tensor(tokenwise_embeddings[...,768:]).to(self.pipe.device).half() },
+            tokenwise_embeddings={ NAME_OPENAI_CLIP_VIT_L: torch.tensor(tokenwise_embeddings[...,:768]).to(self.pipe.device).bfloat16(), NAME_OPENCLIP_G: torch.tensor(tokenwise_embeddings[...,768:]).to(self.pipe.device).bfloat16() },
             tokenwise_embedding_spans=token_spans,
         )
-        prompt_emb_obj.pooled_embeddings = { NAME_OPENAI_CLIP_VIT_L: torch.tensor(X_mean_pooled)[:768].to(self.pipe.device).half(), NAME_OPENCLIP_G: torch.tensor(X_mean_pooled)[768:].to(self.pipe.device).half() }
-        return prompt_emb_obj, torch.tensor(tokenwise_direction).to(self.pipe.device).half()
+        prompt_emb_obj.pooled_embeddings = { NAME_OPENAI_CLIP_VIT_L: torch.tensor(X_mean_pooled)[:768].to(self.pipe.device).bfloat16(), NAME_OPENCLIP_G: torch.tensor(X_mean_pooled)[768:].to(self.pipe.device).bfloat16() }
+        return prompt_emb_obj, torch.tensor(tokenwise_direction).to(self.pipe.device).bfloat16()
 
     def _get_pipe_kwargs(self, embs: List[PromptEmbedding], embs_neg: Optional[List[PromptEmbedding]] = None, start_sample: Optional[torch.Tensor] = None, **kwargs):
         
