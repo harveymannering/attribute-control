@@ -435,10 +435,10 @@ class SDXL(SD15):
         add_time_ids = add_time_ids.to(start_sample.device).repeat(len(embs), 1)
         unet_added_conditions = {
             "time_ids": add_time_ids,
-            "text_embeds": p_embs['pooled_prompt_embeds'][None],
+            "text_embeds": p_embs['pooled_prompt_embeds'][None].to(self.pipe.device),
         }
         print(p_embs['prompt_embeds'].shape, start_sample.shape, t, p_embs['pooled_prompt_embeds'].shape, add_time_ids)
-        print(p_embs['pooled_prompt_embeds'].dtype, p_embs['pooled_prompt_embeds'].device)
+        print(p_embs['prompt_embeds'].dtype, p_embs['prompt_embeds'].device, p_embs['pooled_prompt_embeds'].dtype, p_embs['pooled_prompt_embeds'].device)
         return self._get_eps_pred(t, start_sample, self.pipe.unet(start_sample, t, encoder_hidden_states=p_embs['prompt_embeds'], added_cond_kwargs=unet_added_conditions).sample)
 
 
