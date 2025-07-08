@@ -296,7 +296,7 @@ class SD15(DiffusersSDModelBase):
         token_spans = self.get_token_spans(f"{prompt_prefix} {prompt_suffix}")
         prompt_emb_obj = PromptEmbedding(
             prompt=f"{prompt_prefix} {prompt_suffix}",
-            tokenwise_embeddings={ NAME_OPENAI_CLIP_VIT_L: tokenwise_embeddings.to(self.pipe.device).half()},
+            tokenwise_embeddings={ NAME_OPENAI_CLIP_VIT_L: torch.tensor(tokenwise_embeddings).to(self.pipe.device).half()},
             tokenwise_embedding_spans=token_spans,
         )
         prompt_emb_obj.pooled_embeddings = torch.tensor(X_mean_pooled).to(self.pipe.device).half()
@@ -390,7 +390,7 @@ class SDXL(SD15):
         
         prompt_emb_obj = PromptEmbedding(
             prompt=f"{prompt_prefix} {prompt_suffix}",
-            tokenwise_embeddings={ NAME_OPENAI_CLIP_VIT_L: tokenwise_embeddings[...,:768].to(self.pipe.device).half(), NAME_OPENCLIP_G: tokenwise_embeddings[...,768:].to(self.pipe.device).half() },
+            tokenwise_embeddings={ NAME_OPENAI_CLIP_VIT_L: torch.tensor(tokenwise_embeddings[...,:768]).to(self.pipe.device).half(), NAME_OPENCLIP_G: torch.tensor(tokenwise_embeddings[...,768:]).to(self.pipe.device).half() },
             tokenwise_embedding_spans=token_spans,
         )
         prompt_emb_obj.pooled_embeddings = { NAME_OPENAI_CLIP_VIT_L: torch.tensor(X_mean_pooled)[:768].to(self.pipe.device).half(), NAME_OPENCLIP_G: torch.tensor(X_mean_pooled)[768:].to(self.pipe.device).half() }
@@ -518,7 +518,7 @@ class StableCascade(DiffusersModelBase):
         token_spans = self.get_token_spans(f"{prompt_prefix} {prompt_suffix}")
         prompt_emb_obj = PromptEmbedding(
             prompt=f"{prompt_prefix} {prompt_suffix}",
-            tokenwise_embeddings={ NAME_OPENAI_CLIP_VIT_L: tokenwise_embeddings },
+            tokenwise_embeddings={ NAME_OPENAI_CLIP_VIT_L: torch.tensor(tokenwise_embeddings) },
             tokenwise_embedding_spans=token_spans,
         )
         prompt_emb_obj.pooled_embeddings = torch.tensor(X_mean_pooled)
