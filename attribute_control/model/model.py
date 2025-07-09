@@ -433,12 +433,12 @@ class SDXL(SD15):
         add_time_ids = add_time_ids.to(start_sample.device).repeat(len(embs), 1)
         unet_added_conditions = {
             "time_ids": add_time_ids,
-            "text_embeds": p_embs['pooled_prompt_embeds'].bfloat16().expand(start_sample.shape[0],-1), # TODO: This is sometime batch size 1 ad sometime batch size 4 (change the [None])
+            "text_embeds": p_embs['pooled_prompt_embeds'].bfloat16(), # TODO: This is sometime batch size 1 ad sometime batch size 4 (change the [None])
         }
         # TODO: Also copy p_embs['prompt_embeds'] such that bacth size of 4 is sometime satisfied
         print(p_embs['prompt_embeds'].shape, start_sample.shape, t, p_embs['pooled_prompt_embeds'].shape, flush=True)
         #print(p_embs['prompt_embeds'].dtype, p_embs['prompt_embeds'].device, p_embs['pooled_prompt_embeds'].dtype, p_embs['pooled_prompt_embeds'].device, flush=True)
-        return self._get_eps_pred(t, start_sample, self.pipe.unet(start_sample, t, encoder_hidden_states=p_embs['prompt_embeds'].bfloat16().expand(start_sample.shape[0],-1), added_cond_kwargs=unet_added_conditions).sample)
+        return self._get_eps_pred(t, start_sample, self.pipe.unet(start_sample, t, encoder_hidden_states=p_embs['prompt_embeds'].bfloat16(), added_cond_kwargs=unet_added_conditions).sample)
 
 
 class StableCascade(DiffusersModelBase):
