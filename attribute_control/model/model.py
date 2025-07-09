@@ -400,12 +400,12 @@ class SDXL(SD15):
         
         pipe_kwargs = {
             'prompt_embeds': torch.cat([
-                torch.tensor(reduce_tensors_recursively(*[emb.tokenwise_embeddings[NAME_OPENAI_CLIP_VIT_L] for emb in embs], reduction_op=torch.stack)[0])[None],
-                torch.tensor(reduce_tensors_recursively(*[emb.tokenwise_embeddings[NAME_OPENCLIP_G] for emb in embs], reduction_op=torch.stack)[0])[None]
+                reduce_tensors_recursively(*[emb.tokenwise_embeddings[NAME_OPENAI_CLIP_VIT_L] for emb in embs], reduction_op=torch.stack),
+                reduce_tensors_recursively(*[emb.tokenwise_embeddings[NAME_OPENCLIP_G] for emb in embs], reduction_op=torch.stack)
             ], dim=-1),        
             'pooled_prompt_embeds': torch.cat([
-                torch.tensor(reduce_tensors_recursively(*[emb.pooled_embeddings[NAME_OPENAI_CLIP_VIT_L] for emb in embs], reduction_op=torch.stack)[0]),
-                torch.tensor(reduce_tensors_recursively(*[emb.pooled_embeddings[NAME_OPENCLIP_G] for emb in embs], reduction_op=torch.stack)[0])
+                reduce_tensors_recursively(*[emb.pooled_embeddings[NAME_OPENAI_CLIP_VIT_L] for emb in embs], reduction_op=torch.stack)[0],
+                reduce_tensors_recursively(*[emb.pooled_embeddings[NAME_OPENCLIP_G] for emb in embs], reduction_op=torch.stack)[0]
             ], dim=-1),
             'negative_prompt_embeds': None,
             'negative_pooled_prompt_embeds': None,
@@ -438,10 +438,10 @@ class SDXL(SD15):
         # TODO: Also copy p_embs['prompt_embeds'] such that bacth size of 4 is sometime satisfied
         print(p_embs['prompt_embeds'].shape, start_sample.shape, t, p_embs['pooled_prompt_embeds'].shape, flush=True)
         #print(p_embs['prompt_embeds'].dtype, p_embs['prompt_embeds'].device, p_embs['pooled_prompt_embeds'].dtype, p_embs['pooled_prompt_embeds'].device, flush=True)
-        print("p_embs['prompt_embeds'].requires_grad", p_embs['prompt_embeds'].requires_grad)
-        print("p_embs['prompt_embeds'].bfloat16().expand(start_sample.shape[0],-1,-1).requires_grad", p_embs['prompt_embeds'].bfloat16().expand(start_sample.shape[0],-1,-1).requires_grad)
+        print("p_embs['prompt_embeds'].requires_grad", p_embs['prompt_embeds'].requires_grad, flush=True)
+        print("p_embs['prompt_embeds'].bfloat16().expand(start_sample.shape[0],-1,-1).requires_grad", p_embs['prompt_embeds'].bfloat16().expand(start_sample.shape[0],-1,-1).requires_grad, flush=True)
         sample = self.pipe.unet(start_sample, t, encoder_hidden_states=p_embs['prompt_embeds'].bfloat16().expand(start_sample.shape[0],-1,-1), added_cond_kwargs=unet_added_conditions).sample
-        print("sample.requires_grad", sample.requires_grad)
+        print("sample.requires_grad", sample.requires_grad, flush=True)
         return self._get_eps_pred(t, start_sample, sample)
 
 

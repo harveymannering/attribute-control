@@ -120,7 +120,7 @@ def main(cfg: DictConfig):
                 einops.rearrange(x_t, 'b_e b c h w -> (b_e b) c h w').detach(),
                 t_relative.unsqueeze(0).expand(scale_batch_size, -1).flatten()
             ).view(*x_t.shape)
-            print("eps_delta.requires_grad", eps_delta.requires_grad)
+            print("eps_delta.requires_grad", eps_delta.requires_grad, flush=True)
             loss = F.mse_loss(eps_delta, eps_target.detach())
 
             loss.backward()
