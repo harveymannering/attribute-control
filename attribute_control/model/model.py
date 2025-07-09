@@ -296,10 +296,10 @@ class SD15(DiffusersSDModelBase):
         token_spans = self.get_token_spans(f"{prompt_prefix} {prompt_suffix}")
         prompt_emb_obj = PromptEmbedding(
             prompt=f"{prompt_prefix} {prompt_suffix}",
-            tokenwise_embeddings={ NAME_OPENAI_CLIP_VIT_L: torch.tensor(tokenwise_embeddings).to(self.pipe.device).bfloat16()},
+            tokenwise_embeddings={ NAME_OPENAI_CLIP_VIT_L: torch.tensor(tokenwise_embeddings).to(self.pipe.device)},
             tokenwise_embedding_spans=token_spans,
         )
-        prompt_emb_obj.pooled_embeddings = torch.tensor(X_mean_pooled).to(self.pipe.device).bfloat16()
+        prompt_emb_obj.pooled_embeddings = torch.tensor(X_mean_pooled).to(self.pipe.device)
         return prompt_emb_obj, tokenwise_direction
 
     def _get_pipe_kwargs(self, embs: List[PromptEmbedding], embs_neg: Optional[List[PromptEmbedding]] = None, start_sample: Optional[torch.Tensor] = None, **kwargs):
@@ -390,11 +390,11 @@ class SDXL(SD15):
         
         prompt_emb_obj = PromptEmbedding(
             prompt=f"{prompt_prefix} {prompt_suffix}",
-            tokenwise_embeddings={ NAME_OPENAI_CLIP_VIT_L: torch.tensor(tokenwise_embeddings[...,:768]).to(self.pipe.device).bfloat16(), NAME_OPENCLIP_G: torch.tensor(tokenwise_embeddings[...,768:]).to(self.pipe.device).bfloat16() },
+            tokenwise_embeddings={ NAME_OPENAI_CLIP_VIT_L: torch.tensor(tokenwise_embeddings[...,:768]).to(self.pipe.device), NAME_OPENCLIP_G: torch.tensor(tokenwise_embeddings[...,768:]).to(self.pipe.device) },
             tokenwise_embedding_spans=token_spans,
         )
-        prompt_emb_obj.pooled_embeddings = { NAME_OPENAI_CLIP_VIT_L: torch.tensor(X_mean_pooled)[:768].to(self.pipe.device).bfloat16(), NAME_OPENCLIP_G: torch.tensor(X_mean_pooled)[768:].to(self.pipe.device).bfloat16() }
-        return prompt_emb_obj, torch.tensor(tokenwise_direction).to(self.pipe.device).bfloat16()
+        prompt_emb_obj.pooled_embeddings = { NAME_OPENAI_CLIP_VIT_L: torch.tensor(X_mean_pooled)[:768].to(self.pipe.device), NAME_OPENCLIP_G: torch.tensor(X_mean_pooled)[768:].to(self.pipe.device) }
+        return prompt_emb_obj, torch.tensor(tokenwise_direction).to(self.pipe.device)
 
     def _get_pipe_kwargs(self, embs: List[PromptEmbedding], embs_neg: Optional[List[PromptEmbedding]] = None, start_sample: Optional[torch.Tensor] = None, **kwargs):
         
@@ -433,11 +433,12 @@ class SDXL(SD15):
         add_time_ids = add_time_ids.to(start_sample.device).repeat(len(embs), 1)
         unet_added_conditions = {
             "time_ids": add_time_ids,
-            "text_embeds": p_embs['pooled_prompt_embeds'][None],
+            "text_embeds": p_embs['pooled_prompt_embeds'].bfloat16().expand(start_sample.shape[0],-1), # TODO: This is sometime batch size 1 ad sometime batch size 4 (change the [None])
         }
-        print(p_embs['prompt_embeds'].shape, t, p_embs['pooled_prompt_embeds'].shape, flush=True)
-        print(p_embs['prompt_embeds'].dtype, p_embs['prompt_embeds'].device, p_embs['pooled_prompt_embeds'].dtype, p_embs['pooled_prompt_embeds'].device)
-        return self._get_eps_pred(t, start_sample, self.pipe.unet(start_sample, t, encoder_hidden_states=p_embs['prompt_embeds'], added_cond_kwargs=unet_added_conditions).sample)
+        # TODO: Also copy p_embs['prompt_embeds'] such that bacth size of 4 is sometime satisfied
+        print(p_embs['prompt_embeds'].shape, start_sample.shape, t, p_embs['pooled_prompt_embeds'].shape, flush=True)
+        #print(p_embs['prompt_embeds'].dtype, p_embs['prompt_embeds'].device, p_embs['pooled_prompt_embeds'].dtype, p_embs['pooled_prompt_embeds'].device, flush=True)
+        return self._get_eps_pred(t, start_sample, self.pipe.unet(start_sample, t, encoder_hidden_states=p_embs['prompt_embeds'].bfloat16().expand(start_sample.shape[0],-1), added_cond_kwargs=unet_added_conditions).sample)
 
 
 class StableCascade(DiffusersModelBase):
