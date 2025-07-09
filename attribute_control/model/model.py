@@ -438,7 +438,11 @@ class SDXL(SD15):
         # TODO: Also copy p_embs['prompt_embeds'] such that bacth size of 4 is sometime satisfied
         print(p_embs['prompt_embeds'].shape, start_sample.shape, t, p_embs['pooled_prompt_embeds'].shape, flush=True)
         #print(p_embs['prompt_embeds'].dtype, p_embs['prompt_embeds'].device, p_embs['pooled_prompt_embeds'].dtype, p_embs['pooled_prompt_embeds'].device, flush=True)
-        return self._get_eps_pred(t, start_sample, self.pipe.unet(start_sample, t, encoder_hidden_states=p_embs['prompt_embeds'].bfloat16().expand(start_sample.shape[0],-1,-1), added_cond_kwargs=unet_added_conditions).sample)
+        print("p_embs['prompt_embeds'].requires_grad", p_embs['prompt_embeds'].requires_grad)
+        print("p_embs['prompt_embeds'].bfloat16().expand(start_sample.shape[0],-1,-1).requires_grad", p_embs['prompt_embeds'].bfloat16().expand(start_sample.shape[0],-1,-1).requires_grad)
+        sample = self.pipe.unet(start_sample, t, encoder_hidden_states=p_embs['prompt_embeds'].bfloat16().expand(start_sample.shape[0],-1,-1), added_cond_kwargs=unet_added_conditions).sample
+        print("sample.requires_grad", sample.requires_grad)
+        return self._get_eps_pred(t, start_sample, sample)
 
 
 class StableCascade(DiffusersModelBase):

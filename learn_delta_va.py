@@ -62,7 +62,7 @@ def main(cfg: DictConfig):
     dataset = PromptCombinationDataset_VA(cfg.prompts, cfg.prefixes)
     batch_size: int = cfg.batch_size
     scale_batch_size: int = cfg.scale_batch_size
-    scale_min, scale_max = cfg.scale_range
+    scale_min, scale_max = 0.1, 1 # cfg.scale_range
     randomize_scale_sign: bool = cfg.randomize_scale_sign
     grad_accum_steps: int = cfg.grad_accum_steps
     max_steps: int = cfg.max_steps
@@ -120,6 +120,7 @@ def main(cfg: DictConfig):
                 einops.rearrange(x_t, 'b_e b c h w -> (b_e b) c h w').detach(),
                 t_relative.unsqueeze(0).expand(scale_batch_size, -1).flatten()
             ).view(*x_t.shape)
+            print("eps_delta.requires_grad", eps_delta.requires_grad)
             loss = F.mse_loss(eps_delta, eps_target.detach())
 
             loss.backward()
